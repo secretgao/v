@@ -2,11 +2,9 @@
 
 namespace Illuminate\Mail;
 
-use Illuminate\Contracts\View\Factory as ViewFactory;
+use Parsedown;
 use Illuminate\Support\HtmlString;
-use Illuminate\Support\Str;
-use League\CommonMark\CommonMarkConverter;
-use League\CommonMark\Extension\Table\TableExtension;
+use Illuminate\Contracts\View\Factory as ViewFactory;
 use TijsVerkoyen\CssToInlineStyles\CssToInlineStyles;
 
 class Markdown
@@ -62,16 +60,8 @@ class Markdown
             'mail', $this->htmlComponentPaths()
         )->make($view, $data)->render();
 
-        if ($this->view->exists($customTheme = Str::start($this->theme, 'mail.'))) {
-            $theme = $customTheme;
-        } else {
-            $theme = Str::contains($this->theme, '::')
-                ? $this->theme
-                : 'mail::themes.'.$this->theme;
-        }
-
         return new HtmlString(($inliner ?: new CssToInlineStyles)->convert(
-            $contents, $this->view->make($theme, $data)->render()
+            $contents, $this->view->make('mail::themes.'.$this->theme)->render()
         ));
     }
 
@@ -103,13 +93,9 @@ class Markdown
      */
     public static function parse($text)
     {
-        $converter = new CommonMarkConverter([
-            'allow_unsafe_links' => false,
-        ]);
+        $parsedown = new Parsedown;
 
-        $converter->getEnvironment()->addExtension(new TableExtension());
-
-        return new HtmlString((string) $converter->convertToHtml($text));
+        return new HtmlString($parsedown->text($text));
     }
 
     /**
@@ -170,15 +156,5 @@ class Markdown
         $this->theme = $theme;
 
         return $this;
-    }
-
-    /**
-     * Get the theme currently being used by the renderer.
-     *
-     * @return string
-     */
-    public function getTheme()
-    {
-        return $this->theme;
     }
 }

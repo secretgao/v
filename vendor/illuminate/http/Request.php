@@ -2,21 +2,16 @@
 
 namespace Illuminate\Http;
 
-use ArrayAccess;
 use Closure;
-use Illuminate\Contracts\Support\Arrayable;
+use ArrayAccess;
+use RuntimeException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Macroable;
-use RuntimeException;
+use Illuminate\Contracts\Support\Arrayable;
 use Symfony\Component\HttpFoundation\ParameterBag;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
-/**
- * @method array validate(array $rules, ...$params)
- * @method array validateWithBag(string $errorBag, array $rules, ...$params)
- * @method bool hasValidSignature(bool $absolute = true)
- */
 class Request extends SymfonyRequest implements Arrayable, ArrayAccess
 {
     use Concerns\InteractsWithContentTypes,
@@ -134,23 +129,6 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     }
 
     /**
-     * Get the full URL for the request without the given query string parameters.
-     *
-     * @param  array|string  $query
-     * @return string
-     */
-    public function fullUrlWithoutQuery($keys)
-    {
-        $query = Arr::except($this->query(), $keys);
-
-        $question = $this->getBaseUrl().$this->getPathInfo() === '/' ? '/?' : '?';
-
-        return count($query) > 0
-            ? $this->url().$question.Arr::query($query)
-            : $this->url();
-    }
-
-    /**
      * Get the current path info for the request.
      *
      * @return string
@@ -159,7 +137,7 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     {
         $pattern = trim($this->getPathInfo(), '/');
 
-        return $pattern === '' ? '/' : $pattern;
+        return $pattern == '' ? '/' : $pattern;
     }
 
     /**
@@ -229,7 +207,7 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     }
 
     /**
-     * Determine if the current request URL and query string match a pattern.
+     * Determine if the current request URL and query string matches a pattern.
      *
      * @param  mixed  ...$patterns
      * @return bool
@@ -258,7 +236,7 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     }
 
     /**
-     * Determine if the request is the result of a PJAX call.
+     * Determine if the request is the result of an PJAX call.
      *
      * @return bool
      */
@@ -268,14 +246,14 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     }
 
     /**
-     * Determine if the request is the result of a prefetch call.
+     * Determine if the request is the result of an prefetch call.
      *
      * @return bool
      */
     public function prefetch()
     {
-        return strcasecmp($this->server->get('HTTP_X_MOZ') ?? '', 'prefetch') === 0 ||
-               strcasecmp($this->headers->get('Purpose') ?? '', 'prefetch') === 0;
+        return strcasecmp($this->server->get('HTTP_X_MOZ'), 'prefetch') === 0 ||
+               strcasecmp($this->headers->get('Purpose'), 'prefetch') === 0;
     }
 
     /**
@@ -311,7 +289,7 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     /**
      * Get the client user agent.
      *
-     * @return string|null
+     * @return string
      */
     public function userAgent()
     {
@@ -329,19 +307,6 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
         $this->getInputSource()->add($input);
 
         return $this;
-    }
-
-    /**
-     * Merge new input into the request's input, but only when that key is missing from the request.
-     *
-     * @param  array  $input
-     * @return $this
-     */
-    public function mergeIfMissing(array $input)
-    {
-        return $this->merge(collect($input)->filter(function ($value, $key) {
-            return $this->missing($key);
-        })->toArray());
     }
 
     /**
@@ -366,7 +331,7 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * @param  mixed  $default
      * @return mixed
      */
-    public function get(string $key, $default = null)
+    public function get($key, $default = null)
     {
         return parent::get($key, $default);
     }
@@ -375,7 +340,7 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * Get the JSON payload for the request.
      *
      * @param  string|null  $key
-     * @param  mixed  $default
+     * @param  mixed   $default
      * @return \Symfony\Component\HttpFoundation\ParameterBag|mixed
      */
     public function json($key = null, $default = null)
@@ -453,6 +418,10 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      */
     public static function createFromBase(SymfonyRequest $request)
     {
+        if ($request instanceof static) {
+            return $request;
+        }
+
         $newRequest = (new static)->duplicate(
             $request->query->all(), $request->request->all(), $request->attributes->all(),
             $request->cookies->all(), $request->files->all(), $request->server->all()
@@ -469,8 +438,6 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
 
     /**
      * {@inheritdoc}
-     *
-     * @return static
      */
     public function duplicate(array $query = null, array $request = null, array $attributes = null, array $cookies = null, array $files = null, array $server = null)
     {
@@ -554,8 +521,8 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * Get the route handling the request.
      *
      * @param  string|null  $param
-     * @param  mixed  $default
-     * @return \Illuminate\Routing\Route|object|string|null
+     * @param  mixed   $default
+     * @return \Illuminate\Routing\Route|object|string
      */
     public function route($param = null, $default = null)
     {
@@ -666,13 +633,10 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * @param  string  $offset
      * @return bool
      */
-    #[\ReturnTypeWillChange]
     public function offsetExists($offset)
     {
-        $route = $this->route();
-
         return Arr::has(
-            $this->all() + ($route ? $route->parameters() : []),
+            $this->all() + $this->route()->parameters(),
             $offset
         );
     }
@@ -683,7 +647,6 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * @param  string  $offset
      * @return mixed
      */
-    #[\ReturnTypeWillChange]
     public function offsetGet($offset)
     {
         return $this->__get($offset);
@@ -696,7 +659,6 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * @param  mixed  $value
      * @return void
      */
-    #[\ReturnTypeWillChange]
     public function offsetSet($offset, $value)
     {
         $this->getInputSource()->set($offset, $value);
@@ -708,7 +670,6 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * @param  string  $offset
      * @return void
      */
-    #[\ReturnTypeWillChange]
     public function offsetUnset($offset)
     {
         $this->getInputSource()->remove($offset);
